@@ -5,10 +5,8 @@
 #include <vector>
 #include <queue>
 #include <stack>
-#include <assert.h>
 
-//class ObjectPool
-struct ObjectPool{
+class ObjectPool{
 	uint8_t* _buffer = nullptr;
 	uint64_t _bufferSize = 0;
 
@@ -45,6 +43,10 @@ public:
 	inline void remove(uint64_t index);
 
 	inline void processRemoved(uint64_t limit = 0);
+
+	inline void setChunkSize(uint64_t size);
+
+	inline uint64_t size() const;
 };
 
 inline void ObjectPool::_expandBuffer(){
@@ -63,6 +65,7 @@ inline void ObjectPool::_shrinkBuffer(){
 		return;
 
 	_freeMemoryQueue.pop();
+	_freeMemoryQueue.push(MemHelp::Info(0, top.size - _chunkSize));
 
 	_bufferSize -= _chunkSize;
 	_buffer = MemHelp::allocate(_bufferSize, _buffer);
@@ -201,7 +204,6 @@ inline void ObjectPool::processRemoved(uint64_t limit){
 
 	while (inserted < limit){
 		uint64_t index = _removedIndexes.front();
-		assert(_validIndex(index));
 
 		_returnMemory(_indexLocations[index], false);
 
@@ -215,5 +217,14 @@ inline void ObjectPool::processRemoved(uint64_t limit){
 
 	_rebuildFreeMemoryQueue();
 
-	//_shrinkBuffer();
+	_shrinkBuffer();
+}
+
+inline void ObjectPool::setChunkSize(uint64_t size){
+	if (size)
+		_chunkSize = size;
+}
+
+inline uint64_t ObjectPool::size() const{
+	return _bufferSize;
 }

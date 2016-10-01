@@ -5,20 +5,24 @@
 #include <random>
 #include <list>
 
+#define CHUNK RAND_MAX * 4
+#define LOOPS 1024
+#define BLOCKS 1024
+
 int main(int argc, char *argv[]){
 	srand((unsigned int)time(nullptr));
 
-	ObjectPool pool(RAND_MAX * 4);
+	ObjectPool pool(CHUNK);
 	std::list<uint64_t> ids;
 
-	for (unsigned int n = 0; n < 8; n++){
-		for (unsigned int i = 0; i < 1024; i++){
+	for (unsigned int n = 0; n < LOOPS; n++){
+		for (unsigned int i = 0; i < BLOCKS; i++){
 			ids.push_back(pool.insert(rand() + 1));
 		}
 
-		printf("Before - %d\n", pool._bufferSize);
+		printf("Before - %d\n", pool.size());
 
-		for (unsigned int i = 0; i < 1024; i++){
+		for (unsigned int i = 0; i < BLOCKS; i++){
 			auto iter = ids.begin();
 			std::advance(iter, rand() % ids.size());
 
@@ -28,36 +32,8 @@ int main(int argc, char *argv[]){
 
 		pool.processRemoved();
 
-		printf("After - %d\n", pool._bufferSize);
+		printf("After  - %d\n", pool.size());
 	}
 	
 	return 0;
-
-	/*PoolPointer pointer = pool.newPointer<Transform, Model, Script, Script, Script>();
-
-	for (unsigned int i = i; i < pointer.has<Script>(); i++){
-		pointer.write<Script>(i)->tableId = i + 1;
-	}
-
-	pointer.invalidate();
-
-
-	PoolPointer i = pool.begin();
-
-	while (i){
-		if (i.has<Transform, Model>()){
-			i.write<Transform>()->x = 1.f;
-			i.write<Transform>()->y = 2.f;
-			i.write<Transform>()->z = 3.f;
-
-			printf(i.read<Model>()->source);
-		}
-
-		i.erase();
-		i++;
-	}
-
-	pool.processErased();
-
-	return 0;*/
 }
