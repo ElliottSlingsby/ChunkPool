@@ -1,0 +1,26 @@
+cmake_minimum_required(VERSION 2.6)
+
+project(ObjectPool C CXX)
+
+option(OBJECTPOOL_TESTING "ObjectPool testing main" ON)
+
+if(NOT OBJECTPOOL_TESTING)
+
+	file(GLOB OBJECTPOOL_SOURCE "*.hpp")
+	add_library(ObjectPool ${OBJECTPOOL_SOURCE})
+	
+else(NOT OBJECTPOOL_TESTING)
+
+	if(MSVC)
+		foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES})
+			string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG)
+			set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG} "${CMAKE_SOURCE_DIR}/bin")
+		endforeach(OUTPUTCONFIG CMAKE_CONFIGURATION_TYPES)
+	else(MSVC)
+		set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
+	endif(MSVC)
+
+	file(GLOB OBJECTPOOL_SOURCE "*.hpp" "*.cpp")
+	add_executable(ObjectPool ${OBJECTPOOL_SOURCE})
+	
+endif(NOT OBJECTPOOL_TESTING)
