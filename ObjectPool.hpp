@@ -20,12 +20,11 @@ protected:
 	std::vector<MemHelp::Info> _freeMemory;
 	std::priority_queue<MemHelp::Size> _freeMemoryQueue;
 
-	std::vector<MemHelp::Location> _indexOrder;
+	std::vector<MemHelp::Location> _orderedIndexes;
 
 	std::queue<uint64_t> _removedIndexes;
 
 	inline void _expandBuffer();
-	inline void _shrinkBuffer();
 
 	inline void _expandInfoBuffers();
 
@@ -34,7 +33,7 @@ protected:
 	inline void _rebuildFreeMemory();
 	inline void _rebuildFreeMemoryQueue();
 
-	inline void _sortIndexOrder();
+	inline void _rebuildIndexOrder();
 
 	inline void _returnMemory(MemHelp::Info memory, bool rebuildQueue = true);
 	inline MemHelp::Info _findMemory(uint64_t size);
@@ -43,44 +42,64 @@ public:
 	class Iterator{
 	protected:
 		ObjectPool* _pool = nullptr;
-
-		uint64_t _index = 0;
-		uint64_t _size = 0;
+		MemHelp::Info _memory = 0;
+		uint64_t _i = 0;
 
 	public:
-		Iterator(ObjectPool* pool, uint64_t index){
-			if (!pool || !pool->_validIndex(index))
+		Iterator(){}
+
+		Iterator(ObjectPool* pool){
+			if (!pool || pool->_orderedIndexes.empty())
 				return;
 
 			_pool = pool;
-			_index = index;
-			_size = _pool->_indexLocations[index].size;
+			_memory = *_pool->_orderedIndexes.begin();
+			_i = 0;
+		}
+
+		Iterator(const Iterator& other){
+			operator=(other);
 		}
 
 		virtual ~Iterator(){}
 
+		void operator=(const Iterator& other){
+			_pool = other._pool;
+			_memory = other._memory;
+		}
+
 		inline bool valid() const{
-			return _pool != nullptr && _size != 0;
+			return _pool && _memory;
 		}
 
 		inline uint64_t size() const{
 			if (valid())
-				return _size;
+				return _memory.size;
 
 			return 0;
 		}
 
 		inline uint8_t* get(){
-			// Return pointer to location in buffer
+			if (valid())
+				return _pool->_buffer + _memory.start;
 
 			return nullptr;
 		}
 
-		inline void increment() const{
+		inline void next(){
 			if (!valid())
 				return;
 
-			// Find next index using _indexOrder
+			_i++;
+
+			if (_i >= _pool->_orderedIndexes.size()){
+				_memory = 0;
+				_i = 0;
+
+				return;
+			}
+
+			_memory = _pool->_orderedIndexes[_i];
 		}
 	};
 
@@ -103,6 +122,8 @@ public:
 
 	inline void setChunkSize(uint64_t size);
 
+	inline Iterator begin();
+
 	inline uint64_t size() const;
 
 	inline uint64_t empty() const;
@@ -117,21 +138,6 @@ inline void ObjectPool::_expandBuffer(){
 
 	_bufferSize += _chunkSize;
 	_buffer = MemHelp::allocate(_bufferSize, _buffer);
-}
-
-inline void ObjectPool::_shrinkBuffer(){
-	//MemHelp::Info top = _freeMemoryQueue.top();
-	//
-	//if (top.end() != _bufferSize || top.size < _chunkSize)
-	//	return;
-	//
-	//_freeMemoryQueue.pop();
-	//_freeMemoryQueue.push(MemHelp::Info(top.start, top.size - _chunkSize));
-	//
-	//_bufferSize -= _chunkSize;
-	//_buffer = MemHelp::allocate(_bufferSize, _buffer);
-	//
-	//_rebuildFreeMemory();
 }
 
 inline void ObjectPool::_expandInfoBuffers(){
@@ -164,15 +170,15 @@ inline void ObjectPool::_rebuildFreeMemoryQueue(){
 	}
 }
 
-inline void ObjectPool::_sortIndexOrder(){
-	_indexOrder.clear();
+inline void ObjectPool::_rebuildIndexOrder(){
+	_orderedIndexes.clear();
 
 	for (uint64_t i = 0; i < _indexLocations.size(); i++){
 		if (_validIndex(i))
-			_indexOrder.push_back(_indexLocations[i]);
+			_orderedIndexes.push_back(_indexLocations[i]);
 	}
 
-	std::sort(_indexOrder.begin(), _indexOrder.end());
+	std::sort(_orderedIndexes.begin(), _orderedIndexes.end());
 }
 
 inline void ObjectPool::_returnMemory(MemHelp::Info memory, bool rebuildQueue){
@@ -253,7 +259,7 @@ inline uint64_t ObjectPool::insert(uint64_t size){
 
 	std::memset(_buffer + memory.start, 0, memory.size);
 
-	_sortIndexOrder();
+	_rebuildIndexOrder();
 
 	return index;
 }
@@ -301,7 +307,7 @@ inline void ObjectPool::processRemoved(uint64_t limit){
 
 	_rebuildFreeMemoryQueue();
 
-	_sortIndexOrder();
+	_rebuildIndexOrder();
 }
 
 inline void ObjectPool::shrink(uint64_t limit){
@@ -339,6 +345,10 @@ inline void ObjectPool::clear(){
 inline void ObjectPool::setChunkSize(uint64_t size){
 	if (size)
 		_chunkSize = size;
+}
+
+inline ObjectPool::Iterator ObjectPool::begin(){
+	return Iterator(this);
 }
 
 inline uint64_t ObjectPool::size() const{
