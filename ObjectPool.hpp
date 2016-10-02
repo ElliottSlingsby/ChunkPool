@@ -5,6 +5,7 @@
 #include <vector>
 #include <queue>
 #include <stack>
+#include <set>
 
 class ObjectPool{
 protected:
@@ -19,8 +20,10 @@ protected:
 	std::vector<MemHelp::Info> _freeMemory;
 	std::priority_queue<MemHelp::Size> _freeMemoryQueue;
 
+	std::vector<MemHelp::Location> _indexOrder;
+
 	std::queue<uint64_t> _removedIndexes;
-	 
+
 	inline void _expandBuffer();
 	inline void _shrinkBuffer();
 
@@ -31,10 +34,56 @@ protected:
 	inline void _rebuildFreeMemory();
 	inline void _rebuildFreeMemoryQueue();
 
+	inline void _sortIndexOrder();
+
 	inline void _returnMemory(MemHelp::Info memory, bool rebuildQueue = true);
 	inline MemHelp::Info _findMemory(uint64_t size);
 
 public:
+	class Iterator{
+	protected:
+		ObjectPool* _pool = nullptr;
+
+		uint64_t _index = 0;
+		uint64_t _size = 0;
+
+	public:
+		Iterator(ObjectPool* pool, uint64_t index){
+			if (!pool || !pool->_validIndex(index))
+				return;
+
+			_pool = pool;
+			_index = index;
+			_size = _pool->_indexLocations[index].size;
+		}
+
+		virtual ~Iterator(){}
+
+		inline bool valid() const{
+			return _pool != nullptr && _size != 0;
+		}
+
+		inline uint64_t size() const{
+			if (valid())
+				return _size;
+
+			return 0;
+		}
+
+		inline uint8_t* get(){
+			// Return pointer to location in buffer
+
+			return nullptr;
+		}
+
+		inline void increment() const{
+			if (!valid())
+				return;
+
+			// Find next index using _indexOrder
+		}
+	};
+
 	ObjectPool(uint64_t chunkSize);
 	virtual ~ObjectPool();
 
@@ -48,11 +97,17 @@ public:
 
 	inline void processRemoved(uint64_t limit = 0);
 
+	inline void shrink(uint64_t limit = 0);
+
 	inline void clear();
 
 	inline void setChunkSize(uint64_t size);
 
 	inline uint64_t size() const;
+
+	inline uint64_t empty() const;
+
+	friend class Iterator;
 };
 
 inline void ObjectPool::_expandBuffer(){
@@ -65,18 +120,18 @@ inline void ObjectPool::_expandBuffer(){
 }
 
 inline void ObjectPool::_shrinkBuffer(){
-	MemHelp::Info top = _freeMemoryQueue.top();
-
-	if (top.end() != _bufferSize || top.size < _chunkSize)
-		return;
-
-	_freeMemoryQueue.pop();
-	_freeMemoryQueue.push(MemHelp::Info(0, top.size - _chunkSize));
-
-	_bufferSize -= _chunkSize;
-	_buffer = MemHelp::allocate(_bufferSize, _buffer);
-
-	_rebuildFreeMemory();
+	//MemHelp::Info top = _freeMemoryQueue.top();
+	//
+	//if (top.end() != _bufferSize || top.size < _chunkSize)
+	//	return;
+	//
+	//_freeMemoryQueue.pop();
+	//_freeMemoryQueue.push(MemHelp::Info(top.start, top.size - _chunkSize));
+	//
+	//_bufferSize -= _chunkSize;
+	//_buffer = MemHelp::allocate(_bufferSize, _buffer);
+	//
+	//_rebuildFreeMemory();
 }
 
 inline void ObjectPool::_expandInfoBuffers(){
@@ -109,6 +164,17 @@ inline void ObjectPool::_rebuildFreeMemoryQueue(){
 	}
 }
 
+inline void ObjectPool::_sortIndexOrder(){
+	_indexOrder.clear();
+
+	for (uint64_t i = 0; i < _indexLocations.size(); i++){
+		if (_validIndex(i))
+			_indexOrder.push_back(_indexLocations[i]);
+	}
+
+	std::sort(_indexOrder.begin(), _indexOrder.end());
+}
+
 inline void ObjectPool::_returnMemory(MemHelp::Info memory, bool rebuildQueue){
 	std::queue<MemHelp::Info> carryOver;
 
@@ -136,12 +202,9 @@ inline MemHelp::Info ObjectPool::_findMemory(uint64_t size){
 
 	std::stack<MemHelp::Info> larger;
 
-	while (_freeMemoryQueue.top().size >= size){
+	while (_freeMemoryQueue.size() && _freeMemoryQueue.top().size >= size){
 		larger.push(_freeMemoryQueue.top());
 		_freeMemoryQueue.pop();
-
-		if (_freeMemoryQueue.empty())
-			break;
 	}
 
 	MemHelp::Info top = larger.top();
@@ -151,7 +214,7 @@ inline MemHelp::Info ObjectPool::_findMemory(uint64_t size){
 	MemHelp::Info remain = top.subtract(sized);
 
 	if (remain)
-		larger.push(remain);
+		_freeMemoryQueue.push(remain);
 
 	while (larger.size()){
 		_freeMemoryQueue.push(larger.top());
@@ -189,6 +252,8 @@ inline uint64_t ObjectPool::insert(uint64_t size){
 	_indexLocations[index] = memory;
 
 	std::memset(_buffer + memory.start, 0, memory.size);
+
+	_sortIndexOrder();
 
 	return index;
 }
@@ -236,7 +301,25 @@ inline void ObjectPool::processRemoved(uint64_t limit){
 
 	_rebuildFreeMemoryQueue();
 
-	_shrinkBuffer();
+	_sortIndexOrder();
+}
+
+inline void ObjectPool::shrink(uint64_t limit){
+	MemHelp::Info top = _freeMemoryQueue.top();
+
+	if (top.end() != _bufferSize)
+		return;
+
+	if (!limit)
+		limit = top.size;
+
+	_freeMemoryQueue.pop();
+	_freeMemoryQueue.push(MemHelp::Info(top.start, top.size - limit));
+
+	_bufferSize -= limit;
+	_buffer = MemHelp::allocate(_bufferSize, _buffer);
+
+	_rebuildFreeMemory();
 }
 
 inline void ObjectPool::clear(){
@@ -260,4 +343,14 @@ inline void ObjectPool::setChunkSize(uint64_t size){
 
 inline uint64_t ObjectPool::size() const{
 	return _bufferSize;
+}
+
+inline uint64_t ObjectPool::empty() const{
+	uint64_t empty = 0;
+
+	for (const MemHelp::Info& free : _freeMemory){
+		empty += free.size;
+	}
+
+	return empty;
 }

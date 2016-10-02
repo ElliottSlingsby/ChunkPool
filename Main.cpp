@@ -5,14 +5,13 @@
 #include <random>
 #include <list>
 
-#define CHUNK RAND_MAX * 4
+#define CHUNK 0xFFFF
 #define LOOPS 1024
 #define BLOCKS 1024
 
 int main(int argc, char *argv[]){
-	srand((unsigned int)time(nullptr));
-
 	ObjectPool pool(CHUNK);
+
 
 	const char testStr0[] = "Fusce ac turpis aliquet, tristique diam id, venenatis nisl.";
 	const char testStr1[] = "Integer congue tortor euismod tristique elementum.";
@@ -47,13 +46,13 @@ int main(int argc, char *argv[]){
 	pool.remove(index3);
 	pool.remove(index6);
 	pool.remove(index5);
-
+	
 	pool.processRemoved();
 
 	index0 = pool.insert(sizeof(testStr0));
-	index1 = pool.insert(sizeof(testStr1));
+	//index1 = pool.insert(sizeof(testStr1));
 	index3 = pool.insert(sizeof(testStr3));
-	index5 = pool.insert(sizeof(testStr5));
+	//index5 = pool.insert(sizeof(testStr5));
 	index6 = pool.insert(sizeof(testStr6));
 
 	//std::memcpy(pool.get(index0), testStr0, sizeof(testStr0));
@@ -90,14 +89,27 @@ int main(int argc, char *argv[]){
 		printf("Equal = %d %s\n", std::strcmp(testStr7, content7) == 0, content7);
 
 	
+	srand((unsigned int)time(nullptr));
+
+
 	std::list<uint64_t> ids;
 
-	for (unsigned int n = 0; n < LOOPS; n++){
+	while (1){
+	//for (unsigned int n = 0; n < LOOPS; n++){
 		for (unsigned int i = 0; i < BLOCKS; i++){
 			ids.push_back(pool.insert(rand() + 1));
 		}
 
-		printf("Before - %d\n", pool.size());
+		//printf("Used %d - Free %d\n", pool.size(), pool.empty());
+
+		uint64_t size = pool.size();
+		uint64_t empty = pool.empty();
+
+		float used = (1.f / size) * empty;
+
+		//printf("Unused Space - %f percent\n", used * 100);
+
+		printf("%d\n", pool.size());
 
 		for (unsigned int i = 0; i < BLOCKS; i++){
 			auto iter = ids.begin();
@@ -108,8 +120,6 @@ int main(int argc, char *argv[]){
 		}
 
 		pool.processRemoved();
-
-		printf("After  - %d\n", pool.size());
 	}
 	
 	return 0;
