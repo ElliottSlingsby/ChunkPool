@@ -5,7 +5,6 @@
 #include <vector>
 #include <queue>
 #include <stack>
-#include <set>
 
 class ObjectPool{
 protected:
@@ -24,8 +23,6 @@ protected:
 
 	std::queue<uint64_t> _removedIndexes;
 
-	inline void _expandBuffer();
-
 	inline void _expandInfoBuffers();
 
 	inline bool _validIndex(uint64_t index) const;
@@ -36,6 +33,7 @@ protected:
 	inline void _rebuildIndexOrder();
 
 	inline void _returnMemory(MemHelp::Info memory, bool rebuildQueue = true);
+
 	inline MemHelp::Info _findMemory(uint64_t size);
 
 public:
@@ -48,12 +46,12 @@ public:
 	public:
 		Iterator(){}
 
-		Iterator(ObjectPool* pool){
-			if (!pool || pool->_orderedIndexes.empty())
+		Iterator(ObjectPool* pool, MemHelp::Info memory){
+			if (!pool)
 				return;
 
 			_pool = pool;
-			_memory = *_pool->_orderedIndexes.begin();
+			_memory = memory;
 			_i = 0;
 		}
 
@@ -92,53 +90,57 @@ public:
 
 			_i++;
 
-			if (_i >= _pool->_orderedIndexes.size()){
+			if (_i < _pool->_orderedIndexes.size()){
+				_memory = _pool->_orderedIndexes[_i];
+			}
+			else{
 				_memory = 0;
 				_i = 0;
-
-				return;
 			}
-
-			_memory = _pool->_orderedIndexes[_i];
 		}
 	};
+
+	friend class Iterator;
 
 	ObjectPool(uint64_t chunkSize);
 	virtual ~ObjectPool();
 
+	// Returns index to new clear block of memory of size 
 	inline uint64_t insert(uint64_t size);
 
+	// Returns byte pointer to block of memory belonging to index
 	inline uint8_t* get(uint64_t index);
 
+	// Marks index as removed and queues block of memory to be freed
 	inline void remove(uint64_t index);
 
-	inline void reserve(uint64_t size);
+	// Frees removed blocks of memory for re-use
+	inline void freeRemoved(uint64_t limit = 0);
 
-	inline void processRemoved(uint64_t limit = 0);
+	// Potentially allocate memory to guerentee enough of size, or chunk size if 0
+	inline void reserve(uint64_t minimum = 0);
 
-	inline void shrink(uint64_t limit = 0);
+	// Potentially de-allocate memory by size if smaller than chunk, or as much as possible if 0
+	inline void shrink(uint64_t maximum = 0);
 
+	// Clear everything, and reset all buffers
 	inline void clear();
 
+	// Set minimum size to allocate new memory
 	inline void setChunkSize(uint64_t size);
 
+	// Return iterator to first element in linear memory, or non-valid if empty
 	inline Iterator begin();
 
-	inline uint64_t size() const;
+	// Returns total buffer size in bytes
+	inline uint64_t bufferSize() const;
 
-	inline uint64_t empty() const;
+	// Return amount of fragmented un-used buffer memory in bytes
+	inline uint64_t gapSize() const;
 
-	friend class Iterator;
+	// Return amount of top un-used buffer memory in bytes
+	inline uint64_t topSize() const;
 };
-
-inline void ObjectPool::_expandBuffer(){
-	MemHelp::Info top(_bufferSize, _chunkSize);
-
-	_returnMemory(top);
-
-	_bufferSize += _chunkSize;
-	_buffer = MemHelp::allocate(_bufferSize, _buffer);
-}
 
 inline void ObjectPool::_expandInfoBuffers(){
 	_indexLocations.push_back(0);
@@ -281,13 +283,7 @@ inline void ObjectPool::remove(uint64_t index){
 	_removedIndexes.push(index);
 }
 
-inline void ObjectPool::reserve(uint64_t size){
-	while (_freeMemoryQueue.empty() || _freeMemoryQueue.top().size < size){
-		_expandBuffer();
-	}
-}
-
-inline void ObjectPool::processRemoved(uint64_t limit){
+inline void ObjectPool::freeRemoved(uint64_t limit){
 	if (!limit)
 		limit = _removedIndexes.size();
 
@@ -310,19 +306,39 @@ inline void ObjectPool::processRemoved(uint64_t limit){
 	_rebuildIndexOrder();
 }
 
-inline void ObjectPool::shrink(uint64_t limit){
-	MemHelp::Info top = _freeMemoryQueue.top();
+inline void ObjectPool::reserve(uint64_t minimum){
+	MemHelp::Info top;
+	
+	if (_freeMemoryQueue.size() && top.end() != _bufferSize)
+		top = _freeMemoryQueue.top();
 
-	if (top.end() != _bufferSize)
+	if (_chunkSize > minimum)
+		minimum = _chunkSize;
+
+	if (top.size >= minimum)
 		return;
 
-	if (!limit)
-		limit = top.size;
+	MemHelp::Info newTop(_bufferSize, minimum - top.size);
+
+	_returnMemory(newTop);
+
+	_bufferSize += newTop.size;
+	_buffer = MemHelp::allocate(_bufferSize, _buffer);
+}
+
+inline void ObjectPool::shrink(uint64_t maximum){
+	MemHelp::Info top = _freeMemoryQueue.top();
+
+	if (top.end() != _bufferSize || top.size < _chunkSize)
+		return;
+
+	if (!maximum)
+		maximum = top.size;
 
 	_freeMemoryQueue.pop();
-	_freeMemoryQueue.push(MemHelp::Info(top.start, top.size - limit));
+	_freeMemoryQueue.push(MemHelp::Info(top.start, top.size - maximum));
 
-	_bufferSize -= limit;
+	_bufferSize -= maximum;
 	_buffer = MemHelp::allocate(_bufferSize, _buffer);
 
 	_rebuildFreeMemory();
@@ -348,19 +364,30 @@ inline void ObjectPool::setChunkSize(uint64_t size){
 }
 
 inline ObjectPool::Iterator ObjectPool::begin(){
-	return Iterator(this);
+	if (_orderedIndexes.empty())
+		return Iterator();
+
+	return Iterator(this, *_orderedIndexes.begin());
 }
 
-inline uint64_t ObjectPool::size() const{
+inline uint64_t ObjectPool::bufferSize() const{
 	return _bufferSize;
 }
 
-inline uint64_t ObjectPool::empty() const{
+inline uint64_t ObjectPool::gapSize() const{
 	uint64_t empty = 0;
 
 	for (const MemHelp::Info& free : _freeMemory){
-		empty += free.size;
+		if (free.end() != _bufferSize)
+			empty += free.size;
 	}
 
 	return empty;
+}
+
+inline uint64_t ObjectPool::topSize() const{
+	if (_freeMemoryQueue.size() && _freeMemoryQueue.top().end() == _bufferSize)
+		return _freeMemoryQueue.top().size;
+
+	return 0;
 }

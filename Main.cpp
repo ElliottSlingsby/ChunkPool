@@ -49,27 +49,19 @@ int main(int argc, char *argv[]){
 		iter.next();
 	}
 
-	srand((unsigned int)time(nullptr));
 
+	srand((unsigned int)time(nullptr));
 
 	std::list<uint64_t> ids;
 
 	while (1){
 	//for (unsigned int n = 0; n < LOOPS; n++){
 		for (unsigned int i = 0; i < BLOCKS; i++){
-			ids.push_back(pool.insert(rand() + 1));
+			uint64_t r = rand() + 1;
+			ids.push_back(pool.insert(r));
 		}
 
-		//printf("Used %d - Free %d\n", pool.size(), pool.empty());
-
-		uint64_t size = pool.size();
-		uint64_t empty = pool.empty();
-
-		float used = (1.f / size) * empty;
-
-		//printf("Unused Space - %f percent\n", used * 100);
-
-		printf("%d\n", pool.size());
+		printf("%d\n", pool.bufferSize());
 
 		for (unsigned int i = 0; i < BLOCKS; i++){
 			auto iter = ids.begin();
@@ -79,7 +71,7 @@ int main(int argc, char *argv[]){
 			ids.remove(*iter);
 		}
 
-		pool.processRemoved();
+		pool.freeRemoved();
 	}
 	
 	return 0;
