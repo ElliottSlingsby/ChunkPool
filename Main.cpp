@@ -9,6 +9,13 @@
 #define LOOPS 1024
 #define BLOCKS 1024
 
+struct TestStruct{
+	char string[256] = "";
+	float number = 0.f;
+	int integer = 0;
+	bool boolean = false;
+};
+
 int main(int argc, char *argv[]){
 	ObjectPool pool(CHUNK);
 
@@ -40,6 +47,11 @@ int main(int argc, char *argv[]){
 	std::memcpy(pool.get(index6), testStr6, sizeof(testStr6));
 	std::memcpy(pool.get(index7), testStr7, sizeof(testStr7));
 		
+
+	//uint64_t testIndex = pool.insert(sizeof(testStr7));
+
+	//pool.set(10, 0);
+
 
 	ObjectPool::Iterator iter = pool.begin();
 

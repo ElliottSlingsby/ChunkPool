@@ -14,16 +14,15 @@ protected:
 	uint64_t _chunkSize = 0;
 
 	std::vector<MemHelp::Info> _indexLocations;
-	std::vector<uint8_t> _indexRemoved;
 
 	std::vector<MemHelp::Info> _freeMemory;
 	std::priority_queue<MemHelp::Size> _freeMemoryQueue;
 
 	std::vector<MemHelp::Location> _orderedIndexes;
 
-	std::queue<uint64_t> _removedIndexes;
+	std::queue<MemHelp::Info> _removedMemory;
 
-	inline void _expandInfoBuffers();
+	inline void _expandInfoBuffers(uint64_t to = 0);
 
 	inline bool _validIndex(uint64_t index) const;
 
@@ -45,68 +44,39 @@ public:
 
 	public:
 		Iterator(){}
-
-		Iterator(ObjectPool* pool, MemHelp::Info memory){
-			if (!pool)
-				return;
-
-			_pool = pool;
-			_memory = memory;
-			_i = 0;
-		}
-
-		Iterator(const Iterator& other){
-			operator=(other);
-		}
+		Iterator(ObjectPool* pool, MemHelp::Info memory);
+		Iterator(const Iterator& other);
 
 		virtual ~Iterator(){}
 
-		void operator=(const Iterator& other){
-			_pool = other._pool;
-			_memory = other._memory;
-		}
+		inline void operator=(const Iterator& other);
 
-		inline bool valid() const{
-			return _pool && _memory;
-		}
+		// Get memory iterator points to, nullptr if invalid
+		inline uint8_t* get();
 
-		inline uint64_t size() const{
-			if (valid())
-				return _memory.size;
+		// Iterate to next location, or invalidate if at end
+		inline void next();
 
-			return 0;
-		}
+		// Check if iterator is valid
+		inline bool valid() const;
 
-		inline uint8_t* get(){
-			if (valid())
-				return _pool->_buffer + _memory.start;
-
-			return nullptr;
-		}
-
-		inline void next(){
-			if (!valid())
-				return;
-
-			_i++;
-
-			if (_i < _pool->_orderedIndexes.size()){
-				_memory = _pool->_orderedIndexes[_i];
-			}
-			else{
-				_memory = 0;
-				_i = 0;
-			}
-		}
+		// Size of memory iterator points to, 0 if invalid
+		inline uint64_t size() const;
 	};
 
 	friend class Iterator;
 
+	// Chunk size is the minimum the pool will increase by when making new allocations
 	ObjectPool(uint64_t chunkSize);
+
+	// Free all memory
 	virtual ~ObjectPool();
 
 	// Returns index to new clear block of memory of size 
 	inline uint64_t insert(uint64_t size);
+
+	// Set new or existing index to block of memory
+	inline void set(uint64_t index, uint64_t size, bool copy = false);
 
 	// Returns byte pointer to block of memory belonging to index
 	inline uint8_t* get(uint64_t index);
@@ -114,7 +84,7 @@ public:
 	// Marks index as removed and queues block of memory to be freed
 	inline void remove(uint64_t index);
 
-	// Frees removed blocks of memory for re-use
+	// Frees removed blocks of memory forre-use
 	inline void freeRemoved(uint64_t limit = 0);
 
 	// Potentially allocate memory to guerentee enough of size, or chunk size if 0
@@ -142,13 +112,16 @@ public:
 	inline uint64_t topSize() const;
 };
 
-inline void ObjectPool::_expandInfoBuffers(){
-	_indexLocations.push_back(0);
-	_indexRemoved.push_back(0);
+inline void ObjectPool::_expandInfoBuffers(uint64_t to){
+	if (!to)
+		to = _indexLocations.size() + 1;
+
+	if (_indexLocations.size() < to)
+		_indexLocations.resize(to);
 }
 
 inline bool ObjectPool::_validIndex(uint64_t index) const{
-	if (index < _indexLocations.size() && _indexLocations[index] != 0 && _indexRemoved[index] == 0)
+	if (index < _indexLocations.size() && _indexLocations[index] != 0)// && _indexRemoved[index] == 0)
 		return true;
 
 	return false;
@@ -235,6 +208,9 @@ inline MemHelp::Info ObjectPool::_findMemory(uint64_t size){
 }
 
 inline ObjectPool::ObjectPool(uint64_t chunkSize){
+	if (!chunkSize)
+		chunkSize = 1;
+
 	_chunkSize = chunkSize;
 }
 
@@ -243,6 +219,9 @@ inline ObjectPool::~ObjectPool(){
 }
 
 inline uint64_t ObjectPool::insert(uint64_t size){
+	if (!size)
+		size = 1;
+
 	uint64_t index = 0;
 
 	for (uint64_t i = 0; i < _indexLocations.size(); i++){
@@ -250,20 +229,36 @@ inline uint64_t ObjectPool::insert(uint64_t size){
 			index = i;
 	}
 
-	if (!index){
-		_expandInfoBuffers();
-		index = _indexLocations.size() - 1;
-	}
+	if (!index)
+		index = _indexLocations.size();
+
+	set(index, size);
+
+	return index;
+}
+
+inline void ObjectPool::set(uint64_t index, uint64_t size, bool copy){
+	if (!size)
+		return;
+
+	_expandInfoBuffers(index + 1);
 
 	MemHelp::Info memory = _findMemory(size);
 
-	_indexLocations[index] = memory;
-
 	std::memset(_buffer + memory.start, 0, memory.size);
 
-	_rebuildIndexOrder();
+	MemHelp::Info old = _indexLocations[index];
 
-	return index;
+	if (old){
+		if (copy)
+			std::memcpy(_buffer + memory.start, _buffer + old.start, old.size);
+
+		remove(index);
+	}
+
+	_indexLocations[index] = memory;
+
+	_rebuildIndexOrder();
 }
 
 inline uint8_t* ObjectPool::get(uint64_t index){
@@ -276,28 +271,23 @@ inline uint8_t* ObjectPool::get(uint64_t index){
 }
 
 inline void ObjectPool::remove(uint64_t index){
-	if (!_validIndex(index) || _indexRemoved[index])
+	if (!_validIndex(index))
 		return;
 
-	_indexRemoved[index] = 1;
-	_removedIndexes.push(index);
+	_removedMemory.push(_indexLocations[index]);
+	_indexLocations[index] = 0;
 }
 
 inline void ObjectPool::freeRemoved(uint64_t limit){
 	if (!limit)
-		limit = _removedIndexes.size();
+		limit = _removedMemory.size();
 
 	uint64_t inserted = 0;
 
 	while (inserted < limit){
-		uint64_t index = _removedIndexes.front();
+		_returnMemory(_removedMemory.front(), false);
 
-		_returnMemory(_indexLocations[index], false);
-
-		_indexLocations[index] = 0;
-		_indexRemoved[index] = 0;
-
-		_removedIndexes.pop();
+		_removedMemory.pop();
 		inserted++;
 	}
 
@@ -351,11 +341,13 @@ inline void ObjectPool::clear(){
 	_bufferSize = 0;
 
 	std::vector<MemHelp::Info>().swap(_indexLocations);
-	std::vector<uint8_t>().swap(_indexRemoved);
-	std::vector<MemHelp::Info>().swap(_freeMemory);
 
+	std::vector<MemHelp::Info>().swap(_freeMemory);
 	_freeMemoryQueue = std::priority_queue<MemHelp::Size>();
-	_removedIndexes = std::queue<uint64_t>();
+
+	_removedMemory = std::queue<MemHelp::Info>();
+
+	std::vector<MemHelp::Location>().swap(_orderedIndexes);
 }
 
 inline void ObjectPool::setChunkSize(uint64_t size){
@@ -388,6 +380,57 @@ inline uint64_t ObjectPool::gapSize() const{
 inline uint64_t ObjectPool::topSize() const{
 	if (_freeMemoryQueue.size() && _freeMemoryQueue.top().end() == _bufferSize)
 		return _freeMemoryQueue.top().size;
+
+	return 0;
+}
+
+inline ObjectPool::Iterator::Iterator(ObjectPool * pool, MemHelp::Info memory){
+	if (!pool)
+		return;
+
+	_pool = pool;
+	_memory = memory;
+	_i = 0;
+}
+
+inline ObjectPool::Iterator::Iterator(const Iterator & other){
+	operator=(other);
+}
+
+inline void ObjectPool::Iterator::operator=(const Iterator& other){
+	_pool = other._pool;
+	_memory = other._memory;
+}
+
+inline uint8_t * ObjectPool::Iterator::get(){
+	if (valid())
+		return _pool->_buffer + _memory.start;
+
+	return nullptr;
+}
+
+inline void ObjectPool::Iterator::next(){
+	if (!valid())
+		return;
+
+	_i++;
+
+	if (_i < _pool->_orderedIndexes.size()){
+		_memory = _pool->_orderedIndexes[_i];
+	}
+	else{
+		_memory = 0;
+		_i = 0;
+	}
+}
+
+inline bool ObjectPool::Iterator::valid() const{
+	return _pool && _memory;
+}
+
+inline uint64_t ObjectPool::Iterator::size() const{
+	if (valid())
+		return _memory.size;
 
 	return 0;
 }
