@@ -121,7 +121,7 @@ inline void ObjectPool::_expandInfoBuffers(uint64_t to){
 }
 
 inline bool ObjectPool::_validIndex(uint64_t index) const{
-	if (index < _indexLocations.size() && _indexLocations[index] != 0)// && _indexRemoved[index] == 0)
+	if (index < _indexLocations.size() && _indexLocations[index] != 0)
 		return true;
 
 	return false;
@@ -165,6 +165,8 @@ inline void ObjectPool::_returnMemory(MemHelp::Info memory, bool rebuildQueue){
 		else
 			carryOver.push(freeLocation);
 	}
+
+	std::memset(_buffer + memory.start, 0, memory.size);
 
 	_freeMemory.clear();
 	_freeMemory.push_back(memory);
@@ -245,15 +247,13 @@ inline void ObjectPool::set(uint64_t index, uint64_t size, bool copy){
 
 	MemHelp::Info memory = _findMemory(size);
 
-	std::memset(_buffer + memory.start, 0, memory.size);
-
 	MemHelp::Info old = _indexLocations[index];
 
 	if (old){
 		if (copy)
 			std::memcpy(_buffer + memory.start, _buffer + old.start, old.size);
 
-		remove(index);
+		_returnMemory(old);
 	}
 
 	_indexLocations[index] = memory;
@@ -310,10 +310,10 @@ inline void ObjectPool::reserve(uint64_t minimum){
 
 	MemHelp::Info newTop(_bufferSize, minimum - top.size);
 
-	_returnMemory(newTop);
-
 	_bufferSize += newTop.size;
 	_buffer = MemHelp::allocate(_bufferSize, _buffer);
+
+	_returnMemory(newTop);
 }
 
 inline void ObjectPool::shrink(uint64_t maximum){
