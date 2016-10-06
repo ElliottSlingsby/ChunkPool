@@ -20,7 +20,7 @@ protected:
 
 	std::vector<MemHelp::Location> _orderedIndexes;
 
-	std::queue<MemHelp::Info> _removedMemory;
+	std::stack<MemHelp::Info> _removedMemory;
 
 	inline void _expandInfoBuffers(uint64_t to = 0);
 
@@ -39,28 +39,30 @@ public:
 	class Iterator{
 	protected:
 		ObjectPool* _pool = nullptr;
-		MemHelp::Info _memory = 0;
+		uint8_t* _buffer = nullptr;
+
+		MemHelp::Info _location = 0;
 		uint64_t _i = 0;
 
 	public:
 		Iterator(){}
-		Iterator(ObjectPool* pool, MemHelp::Info memory);
+		Iterator(ObjectPool* pool, MemHelp::Info location);
 		Iterator(const Iterator& other);
 
 		virtual ~Iterator(){}
 
 		inline void operator=(const Iterator& other);
 
-		// Get memory iterator points to, nullptr if invalid
+		// Get memory that iterator points to, nullptr if invalid
 		inline uint8_t* get();
 
-		// Iterate to next location, or invalidate if at end
+		// Iterate to next location, or invalidate iter if at end
 		inline void next();
 
-		// Check if iterator is valid
+		// Check if iterator is valid, begin should always be valid if pool not empty
 		inline bool valid() const;
 
-		// Size of memory iterator points to, 0 if invalid
+		// Size of memory that iterator points to, 0 if invalid
 		inline uint64_t size() const;
 	};
 
@@ -285,7 +287,7 @@ inline void ObjectPool::freeRemoved(uint64_t limit){
 	uint64_t inserted = 0;
 
 	while (inserted < limit){
-		_returnMemory(_removedMemory.front(), false);
+		_returnMemory(_removedMemory.top(), false);
 
 		_removedMemory.pop();
 		inserted++;
@@ -345,7 +347,7 @@ inline void ObjectPool::clear(){
 	std::vector<MemHelp::Info>().swap(_freeMemory);
 	_freeMemoryQueue = std::priority_queue<MemHelp::Size>();
 
-	_removedMemory = std::queue<MemHelp::Info>();
+	_removedMemory = std::stack<MemHelp::Info>();
 
 	std::vector<MemHelp::Location>().swap(_orderedIndexes);
 }
@@ -384,12 +386,13 @@ inline uint64_t ObjectPool::topSize() const{
 	return 0;
 }
 
-inline ObjectPool::Iterator::Iterator(ObjectPool * pool, MemHelp::Info memory){
+inline ObjectPool::Iterator::Iterator(ObjectPool* pool, MemHelp::Info location){
 	if (!pool)
 		return;
 
 	_pool = pool;
-	_memory = memory;
+	_buffer = pool->_buffer;
+	_location = location;
 	_i = 0;
 }
 
@@ -398,13 +401,13 @@ inline ObjectPool::Iterator::Iterator(const Iterator & other){
 }
 
 inline void ObjectPool::Iterator::operator=(const Iterator& other){
-	_pool = other._pool;
-	_memory = other._memory;
+	_buffer = other._buffer;
+	_location = other._location;
 }
 
 inline uint8_t * ObjectPool::Iterator::get(){
 	if (valid())
-		return _pool->_buffer + _memory.start;
+		return _buffer + _location.start;
 
 	return nullptr;
 }
@@ -416,21 +419,21 @@ inline void ObjectPool::Iterator::next(){
 	_i++;
 
 	if (_i < _pool->_orderedIndexes.size()){
-		_memory = _pool->_orderedIndexes[_i];
+		_location = _pool->_orderedIndexes[_i];
 	}
 	else{
-		_memory = 0;
+		_location = 0;
 		_i = 0;
 	}
 }
 
 inline bool ObjectPool::Iterator::valid() const{
-	return _pool && _memory;
+	return _pool && _buffer && _location;
 }
 
 inline uint64_t ObjectPool::Iterator::size() const{
 	if (valid())
-		return _memory.size;
+		return _location.size;
 
 	return 0;
 }
