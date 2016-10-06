@@ -24,8 +24,6 @@ protected:
 
 	inline void _expandInfoBuffers(uint64_t to = 0);
 
-	inline bool _validIndex(uint64_t index) const;
-
 	inline void _rebuildFreeMemory();
 	inline void _rebuildFreeMemoryQueue();
 
@@ -83,6 +81,9 @@ public:
 	// Returns byte pointer to block of memory belonging to index
 	inline uint8_t* get(uint64_t index);
 
+	// Returns if ID is set or not
+	inline bool has(uint64_t index) const;
+
 	// Marks index as removed and queues block of memory to be freed
 	inline void remove(uint64_t index);
 
@@ -122,13 +123,6 @@ inline void ObjectPool::_expandInfoBuffers(uint64_t to){
 		_indexLocations.resize(to);
 }
 
-inline bool ObjectPool::_validIndex(uint64_t index) const{
-	if (index < _indexLocations.size() && _indexLocations[index] != 0)
-		return true;
-
-	return false;
-}
-
 inline void ObjectPool::_rebuildFreeMemory(){
 	std::priority_queue<MemHelp::Size> _queue = _freeMemoryQueue;
 	_freeMemory.clear();
@@ -151,7 +145,7 @@ inline void ObjectPool::_rebuildIndexOrder(){
 	_orderedIndexes.clear();
 
 	for (uint64_t i = 0; i < _indexLocations.size(); i++){
-		if (_validIndex(i))
+		if (has(i))
 			_orderedIndexes.push_back(_indexLocations[i]);
 	}
 
@@ -247,6 +241,9 @@ inline void ObjectPool::set(uint64_t index, uint64_t size, bool copy){
 
 	_expandInfoBuffers(index + 1);
 
+	if (_indexLocations[index].size == size)
+		return;
+
 	MemHelp::Info memory = _findMemory(size);
 
 	MemHelp::Info old = _indexLocations[index];
@@ -264,7 +261,7 @@ inline void ObjectPool::set(uint64_t index, uint64_t size, bool copy){
 }
 
 inline uint8_t* ObjectPool::get(uint64_t index){
-	if (!_validIndex(index))
+	if (!has(index))
 		return nullptr;
 
 	MemHelp::Info memory = _indexLocations[index];
@@ -272,8 +269,16 @@ inline uint8_t* ObjectPool::get(uint64_t index){
 	return _buffer + memory.start;
 }
 
+
+inline bool ObjectPool::has(uint64_t index) const{
+	if (index < _indexLocations.size() && _indexLocations[index] != 0)
+		return true;
+
+	return false;
+}
+
 inline void ObjectPool::remove(uint64_t index){
-	if (!_validIndex(index))
+	if (!has(index))
 		return;
 
 	_removedMemory.push(_indexLocations[index]);
