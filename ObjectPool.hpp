@@ -81,7 +81,7 @@ public:
 	// Returns byte pointer to block of memory belonging to index
 	inline uint8_t* get(uint64_t index);
 
-	// Returns if ID is set or not
+	// Returns if index is set or not
 	inline bool has(uint64_t index) const;
 
 	// Marks index as removed and queues block of memory to be freed
@@ -105,8 +105,10 @@ public:
 	// Return iterator to first element in linear memory, or non-valid if empty
 	inline Iterator begin();
 
-	// Returns total buffer size in bytes
-	inline uint64_t bufferSize() const;
+	inline uint64_t totalSize() const;
+
+	// Returns total used buffer size in bytes (add with other size getter to find total)
+	inline uint64_t usedSize() const;
 
 	// Return amount of fragmented un-used buffer memory in bytes
 	inline uint64_t gapSize() const;
@@ -249,7 +251,7 @@ inline void ObjectPool::set(uint64_t index, uint64_t size, bool copy){
 	MemHelp::Info old = _indexLocations[index];
 
 	if (old){
-		if (copy)
+		if (copy && old.size <= memory.size)
 			std::memcpy(_buffer + memory.start, _buffer + old.start, old.size);
 
 		_returnMemory(old);
@@ -306,14 +308,14 @@ inline void ObjectPool::freeRemoved(uint64_t limit){
 inline void ObjectPool::reserve(uint64_t minimum){
 	MemHelp::Info top;
 	
-	if (_freeMemoryQueue.size() && top.end() != _bufferSize)
+	if (_freeMemoryQueue.size() && _freeMemoryQueue.top().end() == _bufferSize)
 		top = _freeMemoryQueue.top();
-
-	if (_chunkSize > minimum)
-		minimum = _chunkSize;
 
 	if (top.size >= minimum)
 		return;
+
+	if (_chunkSize > minimum)
+		minimum = _chunkSize;
 
 	MemHelp::Info newTop(_bufferSize, minimum - top.size);
 
@@ -369,8 +371,18 @@ inline ObjectPool::Iterator ObjectPool::begin(){
 	return Iterator(this, *_orderedIndexes.begin());
 }
 
-inline uint64_t ObjectPool::bufferSize() const{
+inline uint64_t ObjectPool::totalSize() const{
 	return _bufferSize;
+}
+
+inline uint64_t ObjectPool::usedSize() const{
+	uint64_t used = 0;
+
+	for (const MemHelp::Info& block : _indexLocations){
+		used += block.size;
+	}
+
+	return used;
 }
 
 inline uint64_t ObjectPool::gapSize() const{
@@ -392,7 +404,7 @@ inline uint64_t ObjectPool::topSize() const{
 }
 
 inline ObjectPool::Iterator::Iterator(ObjectPool* pool, MemHelp::Info location){
-	if (!pool)
+	if (!pool || !pool->_buffer)
 		return;
 
 	_pool = pool;
@@ -423,13 +435,10 @@ inline void ObjectPool::Iterator::next(){
 
 	_i++;
 
-	if (_i < _pool->_orderedIndexes.size()){
+	if (_i < _pool->_orderedIndexes.size())
 		_location = _pool->_orderedIndexes[_i];
-	}
-	else{
+	else
 		_location = 0;
-		_i = 0;
-	}
 }
 
 inline bool ObjectPool::Iterator::valid() const{
