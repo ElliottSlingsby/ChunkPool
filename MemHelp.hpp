@@ -1,9 +1,12 @@
 #pragma once
 
+#define _CRT_SECURE_NO_DEPRECATE 
+
 #include <cstdint>
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <cstdio>
 
 namespace MemHelp{
 	struct Info{

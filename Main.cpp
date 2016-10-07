@@ -1,39 +1,37 @@
 #include "ObjectPool.hpp"
-#include "TypePool.hpp"
 
 #include <ctime>
 #include <random>
 #include <list>
 
-#define CHUNK 100000000
-#define BLOCKS 1024
-#define MAX 1024 * 64
-#define SIZES 10000
+#define CHUNK 0xFFFFFFF
+#define BLOCKS 0xFFF
+
+#define MAX 0xFFFFFFFF
+#define SIZES 32
+
 #define FILE "test.dat"
 
 int main(int argc, char *argv[]){
 	srand((unsigned int)time(nullptr));
 
 	std::vector<uint64_t> sizes = {
-		8,
-		16,
-		32,
-		64,
-		128,
-		256,
-		512,
-		1024,
+		0xF,
+		0xFF,
+		0xFFF,
+		0xFFFF,
+		0x1FFFF
 	};
 	
-	//for (uint64_t i = 0; i < SIZES; i++){
-	//	sizes.push_back((rand() % MAX) + 1);
-	//}
+	for (uint64_t i = 0; i < SIZES; i++){
+		//sizes.push_back((rand() % MAX) + 1);
+	}
 
 	ObjectPool pool(CHUNK);
 
 	///*
 	for (uint64_t i = 0; i < BLOCKS; i++){
-		pool.set(i, sizes[rand() % sizes.size()]);
+		pool.insert(sizes[rand() % sizes.size()]);
 		printf("Adding %d %d\n", i, pool.totalSize());
 	}
 
@@ -48,6 +46,13 @@ int main(int argc, char *argv[]){
 
 	while (1){
 		pool.set(rand() % BLOCKS, sizes[rand() % sizes.size()]);
+
+		ObjectPool::Iterator i = pool.begin();
+
+		while (i.valid()){
+			//printf("%d\n", i.size());
+			i.next();
+		}
 
 		float size = (float)(pool.usedSize() + pool.gapSize());
 		float percent = (100.f / size) * (float)pool.usedSize();

@@ -5,7 +5,6 @@
 #include <vector>
 #include <queue>
 #include <stack>
-#include <fstream>
 
 class ObjectPool{
 protected:
@@ -22,9 +21,7 @@ protected:
 	uint64_t _chunkSize = 0;
 
 	std::vector<MemHelp::Info> _indexLocations;
-
 	std::vector<MemHelp::Size> _freeMemory;
-
 	std::vector<MemHelp::Location> _orderedIndexes;
 
 	std::stack<MemHelp::Info> _removedMemory;
@@ -83,13 +80,13 @@ public:
 	inline void set(uint64_t index, uint64_t size, bool copy = false);
 
 	// Returns byte pointer to block of memory belonging to index
-	inline uint8_t* get(uint64_t index);
+	inline uint8_t* get(uint64_t index);									// <-- Thread safe?
 
 	// Returns if index is set or not
-	inline bool has(uint64_t index) const;
+	inline bool has(uint64_t index) const;									// <-- Thread safe?
 
 	// Marks index as removed and queues block of memory to be freed
-	inline void remove(uint64_t index);
+	inline void remove(uint64_t index);										// <-- Thread safe?
 
 	// Frees removed blocks of memory forre-use
 	inline void freeRemoved(uint64_t limit = 0);
@@ -370,14 +367,14 @@ inline void ObjectPool::save(const char* fileName){
 	file = std::fopen(fileName, "wb");
 	std::fclose(file);
 
+	file = std::fopen(fileName, "ab");
+
 	FileHeader header;
 
 	header.freeInfoSize = _freeMemory.size();
 	header.indexInfoSize = _indexLocations.size();
 	header.orderInfoSize = _orderedIndexes.size();
 	header.bufferSize = _bufferSize;
-
-	file = std::fopen(fileName, "ab");
 
 	std::fwrite(&header, sizeof(FileHeader), 1, file);
 	std::fwrite(_freeMemory.data(), sizeof(MemHelp::Size), _freeMemory.size(), file);
@@ -391,8 +388,6 @@ inline void ObjectPool::save(const char* fileName){
 inline void ObjectPool::load(const char* fileName){
 	std::FILE* file = nullptr;
 
-	FileHeader header;
-
 	file = std::fopen(fileName, "rb");
 
 	if (!file)
@@ -400,13 +395,13 @@ inline void ObjectPool::load(const char* fileName){
 
 	clear();
 
-	std::fread(&header, sizeof(FileHeader), 1, file);
+	FileHeader header;
 
+	std::fread(&header, sizeof(FileHeader), 1, file);
 	_freeMemory.reserve(header.freeInfoSize);
 	_indexLocations.reserve(header.indexInfoSize);
 	_orderedIndexes.reserve(header.orderInfoSize);
 	_buffer = MemHelp::allocate(header.bufferSize, _buffer);
-
 	_bufferSize = header.bufferSize;
 
 	std::fread(_freeMemory.data(), sizeof(MemHelp::Size), _freeMemory.size(), file);
