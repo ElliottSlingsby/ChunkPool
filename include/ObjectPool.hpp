@@ -68,10 +68,10 @@ public:
 	friend class Iterator;
 
 	// Chunk size is the minimum the pool will increase by when making new allocations
-	ObjectPool(uint64_t chunkSize);
+	inline ObjectPool(uint64_t chunkSize);
 
 	// Free all memory
-	virtual ~ObjectPool();
+	virtual inline ~ObjectPool();
 
 	// Returns index to new clear block of memory of size 
 	inline uint64_t insert(uint64_t size);
@@ -80,13 +80,13 @@ public:
 	inline void set(uint64_t index, uint64_t size, bool copy = false);
 
 	// Returns byte pointer to block of memory belonging to index
-	inline uint8_t* get(uint64_t index);									// <-- Thread safe?
+	inline uint8_t* get(uint64_t index);
 
 	// Returns if index is set or not
-	inline bool has(uint64_t index) const;									// <-- Thread safe?
+	inline bool has(uint64_t index) const;
 
 	// Marks index as removed and queues block of memory to be freed
-	inline void remove(uint64_t index);										// <-- Thread safe?
+	inline void remove(uint64_t index);
 
 	// Frees removed blocks of memory forre-use
 	inline void freeRemoved(uint64_t limit = 0);
@@ -168,6 +168,11 @@ inline void ObjectPool::_returnMemory(MemHelp::Info memory, bool rebuildQueue){
 		std::sort(_freeMemory.rbegin(), _freeMemory.rend());
 }
 
+template <typename T>
+inline static int compare(const void* a, const void* b){
+	return *(T*)a < *(T*)b;
+}
+
 inline MemHelp::Info ObjectPool::_findMemory(uint64_t size){
 	reserve(size);
 
@@ -193,6 +198,7 @@ inline MemHelp::Info ObjectPool::_findMemory(uint64_t size){
 	}
 
 	std::sort(_freeMemory.rbegin(), _freeMemory.rend());
+	//std::qsort(_freeMemory.data(), _freeMemory.size(), sizeof(MemHelp::Size), compare<MemHelp::Size>);
 
 	return sized;
 }

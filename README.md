@@ -1,3 +1,3 @@
 # ObjectPool
 
-Work in progress cache efficient object pool for varyingly sized blocks of POD memory.
+VERY work in progress cache friendly memory allocator for groups of POD objects
