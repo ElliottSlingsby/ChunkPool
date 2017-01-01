@@ -106,25 +106,6 @@ namespace MemHelp{
 		}
 	};
 
-	class BaseType{
-	protected:
-		static uint64_t _typeCounter;
-
-	public:
-		virtual ~BaseType(){}
-	};
-
-	uint64_t BaseType::_typeCounter = 0;
-
-	template <class T>
-	class Type : public BaseType{
-	public:
-		static inline uint64_t type(){
-			static uint64_t type = _typeCounter++;
-			return type;
-		};
-	};
-
 	inline uint8_t* allocate(uint64_t size, void* data){
 		void* newData = nullptr;
 
@@ -136,29 +117,5 @@ namespace MemHelp{
 		assert(newData);
 
 		return (uint8_t*)newData;
-	}
-
-	inline uint8_t getHex(void* ptr, uint64_t pos){
-		uint8_t val = *((uint8_t*)ptr + pos / 2);
-
-		if (pos % 2)
-			val >>= 4;
-
-		return val & 0xF;
-	}
-
-	inline void setHex(void* ptr, uint64_t pos, uint8_t val){
-		val &= 0xF;
-
-		if (pos){
-			if (pos % 2)
-				val <<= 4;
-
-			pos = pos / 2;
-		}
-
-		uint8_t* npos = (uint8_t*)ptr + pos;
-
-		std::memset(npos, val | *npos, 1);
 	}
 }

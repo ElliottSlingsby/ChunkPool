@@ -168,10 +168,10 @@ inline void ObjectPool::_returnMemory(MemHelp::Info memory, bool rebuildQueue){
 		std::sort(_freeMemory.rbegin(), _freeMemory.rend());
 }
 
-template <typename T>
-inline static int compare(const void* a, const void* b){
-	return *(T*)a < *(T*)b;
-}
+//template <typename T>
+//inline static int compare(const void* a, const void* b){
+//	return *(T*)a < *(T*)b;
+//}
 
 inline MemHelp::Info ObjectPool::_findMemory(uint64_t size){
 	reserve(size);
@@ -310,10 +310,7 @@ inline void ObjectPool::reserve(uint64_t minimum){
 	if (top.size >= minimum)
 		return;
 
-	if (_chunkSize > minimum)
-		minimum = _chunkSize;
-
-	MemHelp::Info newTop(_bufferSize, minimum - top.size);
+	MemHelp::Info newTop(_bufferSize, _chunkSize);
 
 	_bufferSize += newTop.size;
 	_buffer = MemHelp::allocate(_bufferSize, _buffer);

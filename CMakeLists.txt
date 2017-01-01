@@ -1,12 +1,18 @@
 cmake_minimum_required(VERSION 3.4)
 
-project(ObjectPool C CXX)
+project("ObjectPool" C CXX)
+
+include("functions.cmake")
+
+option(OBJECTPOOL_TESTING "ObjectPool testing" ON)
+
+add_subdirectory("thirdparty")
 
 add_subdirectory("include")
 
-option(OBJECTPOOL_TESTING "ObjectPool testing main" ON)
-
 if(OBJECTPOOL_TESTING)
+	set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+	
 	if(MSVC)
 		foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES})
 			string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG)
@@ -20,6 +26,7 @@ if(OBJECTPOOL_TESTING)
 		set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 	endif(MSVC)
 	
-	add_subdirectory("test/allocation")
-	add_subdirectory("test/threading")
+	add_subdirectory("testing/allocation")
+	add_subdirectory("testing/threading")
+	add_subdirectory("testing/visualizer")
 endif(OBJECTPOOL_TESTING)

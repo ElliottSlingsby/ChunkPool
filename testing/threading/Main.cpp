@@ -8,14 +8,14 @@
 #define FILE "test.dat"
 
 // Max object size to create
-#define MAX 0xFFFF
+#define MAX 0xFFF
 // Amount of random sizes to create
 #define SIZES 32
 
 // Object pool allocation chunk size
-#define CHUNK 0xFFFFFFF
+#define CHUNK 0.25 * 1024 * 1024 * 1024
 // Amount of objects to insert using random sizes
-#define OBJECTS 0xFFFF
+#define OBJECTS 10000
 
 int main(int argc, char *argv[]){
 	srand((unsigned int)time(nullptr));
@@ -31,7 +31,7 @@ int main(int argc, char *argv[]){
 
 	// Check if dat file exists
 	if (std::fopen(FILE, "r") != nullptr){
-		printf("Loading '%s.dat'...", FILE);
+		printf("Loading '%s'...", FILE);
 		pool.load(FILE);
 	}
 	else{
@@ -40,7 +40,7 @@ int main(int argc, char *argv[]){
 			printf("Adding %d %d\n", i, pool.totalSize());
 		}
 
-		printf("Saving '%s.dat'...", FILE);
+		printf("Saving '%s'...", FILE);
 		pool.save(FILE);
 	}
 
