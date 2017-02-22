@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.4)
 
-project("ObjectPool" C CXX)
+project("ChunkPool" C CXX)
 
 include("functions.cmake")
 
-option(OBJECTPOOL_TESTING "ObjectPool testing" ON)
+option(OBJECTPOOL_TESTING "ChunkPool testing" ON)
 
 add_subdirectory("thirdparty")
 
@@ -26,7 +26,5 @@ if(OBJECTPOOL_TESTING)
 		set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 	endif(MSVC)
 	
-	add_subdirectory("testing/allocation")
-	add_subdirectory("testing/threading")
 	add_subdirectory("testing/visualizer")
 endif(OBJECTPOOL_TESTING)

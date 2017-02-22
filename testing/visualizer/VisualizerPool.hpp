@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ObjectPool.hpp>
+#include <ChunkPool.hpp>
 
 #include <glad\glad.h>
 #include <GLFW\glfw3.h>
@@ -8,6 +8,11 @@
 #include <glm\mat4x4.hpp>
 #include <glm\vec3.hpp>
 #include <glm\gtc\matrix_transform.hpp>
+
+#include <vector>
+
+// Implementation of ChunkPool with an OpenGL window for rendering a visualization of memory.
+// Was more apt for the prior and more complicated version of the ChunkPool, doesn't work and needs updating for new ChunkPool.
 
 #ifndef VISUALIZER_HEIGHT
 #define VISUALIZER_HEIGHT 64
@@ -17,7 +22,7 @@
 #define VISUALIZER_WIDTH 1280
 #endif
 
-class VisualizerPool : public ObjectPool{
+class VisualizerPool : public ChunkPool{
 	GLFWwindow* _window = nullptr;
 
 	GLuint _vertShaderId;
@@ -33,7 +38,7 @@ class VisualizerPool : public ObjectPool{
 	std::vector<glm::uvec2> _buffer;
 
 public:
-	VisualizerPool(uint64_t chunkSize);
+	VisualizerPool();
 	~VisualizerPool();
 
 	void draw();

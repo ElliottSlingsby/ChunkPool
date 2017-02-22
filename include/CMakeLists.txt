@@ -1,3 +1,3 @@
-add_library("ObjectPool" INTERFACE)
+add_library("ChunkPool" INTERFACE)
 
-target_include_directories("ObjectPool" INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories("ChunkPool" INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")

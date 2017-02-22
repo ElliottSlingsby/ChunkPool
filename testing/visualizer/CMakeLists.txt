@@ -2,7 +2,7 @@ file(GLOB src "*.hpp" "*.cpp")
 
 add_executable("Visualizer" "${src}")
 
-target_link_libraries("Visualizer" PUBLIC "ObjectPool")
+target_link_libraries("Visualizer" PUBLIC "ChunkPool")
 
 target_link_libraries("Visualizer" PUBLIC "glad")
 target_link_libraries("Visualizer" PUBLIC "glfw")

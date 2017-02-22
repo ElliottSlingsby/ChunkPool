@@ -14,7 +14,7 @@ const char vertShaderSrc[] =
 const char geomShaderSrc[] =
 	"#version 450\n"
 
-	"uniform mat4 _matrix;"
+	"uniform mat4 matrix;"
 	"uniform vec2 resolution;"
 
 	"uniform uint size;"
@@ -24,18 +24,18 @@ const char geomShaderSrc[] =
 	"layout (triangle_strip, max_vertices = 4) out;"
 
 	"void main(){"
-	"vec2 location = vec2((gl_in[0].gl_Position.x / size) * resolution.x, (gl_in[0].gl_Position.y / size) * resolution.x);"
+		"vec2 location = vec2((gl_in[0].gl_Position.x / size) * resolution.x, (gl_in[0].gl_Position.y / size) * resolution.x);"
 
-	"gl_Position = _matrix * vec4(location.x, 0.0, 0.0, 1.0);" // Top left
-	"EmitVertex();"
+		"gl_Position = matrix * vec4(location.x, 0.0, 0.0, 1.0);"
+		"EmitVertex();"
 
-	"gl_Position = _matrix * vec4(location.x, height, 0.0, 1.0);" // Bottom left
-	"EmitVertex();"
+		"gl_Position = matrix * vec4(location.x, height, 0.0, 1.0);"
+		"EmitVertex();"
 
-	"gl_Position = _matrix * vec4(location.y, 0.0, 0.0, 1.0);" // Top right
-	"EmitVertex();"
+		"gl_Position = matrix * vec4(location.y, 0.0, 0.0, 1.0);"
+		"EmitVertex();"
 
-	"gl_Position = _matrix * vec4(location.y, height, 0.0, 1.0);" // Bottom right
+		"gl_Position = matrix * vec4(location.y, height, 0.0, 1.0);"
 		"EmitVertex();"
 	"};";
 
@@ -80,8 +80,8 @@ int compileShader(GLenum type, GLuint* id, const char* src){
 	return true;
 }
 
-VisualizerPool::VisualizerPool(uint64_t chunkSize) : ObjectPool(chunkSize){
-	// ---------- Create _window ----------
+VisualizerPool::VisualizerPool() : ChunkPool(0){
+	// Create _window
 	if (!glfwInit())
 		return;
 
@@ -104,7 +104,7 @@ VisualizerPool::VisualizerPool(uint64_t chunkSize) : ObjectPool(chunkSize){
 	gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
 	glfwSwapInterval(1);
 
-	// ---------- Compile shaders ----------
+	// Compile shaders
 	bool compiled = true;
 
 	if (!compileShader(GL_VERTEX_SHADER, &_vertShaderId, vertShaderSrc))
@@ -127,7 +127,7 @@ VisualizerPool::VisualizerPool(uint64_t chunkSize) : ObjectPool(chunkSize){
 		return;
 	}
 
-	// ---------- Create shader program ----------
+	// Create shader program
 	_programId = glCreateProgram();
 
 	glAttachShader(_programId, _vertShaderId);
@@ -138,13 +138,13 @@ VisualizerPool::VisualizerPool(uint64_t chunkSize) : ObjectPool(chunkSize){
 
 	GLuint positionLoc = glGetAttribLocation(_programId, "position");
 
-	// ---------- Create vertex array ----------
+	// Create vertex array
 	glGenVertexArrays(1, &_vertArrayId);
 	glBindVertexArray(_vertArrayId);
 
 	glEnableVertexAttribArray(positionLoc);
 
-	// ---------- Set shader attribs ----------
+	// Set shader attribs
 	glGenBuffers(1, &_vertBufferId);
 	glBindBuffer(GL_ARRAY_BUFFER, _vertBufferId);
 
@@ -152,7 +152,6 @@ VisualizerPool::VisualizerPool(uint64_t chunkSize) : ObjectPool(chunkSize){
 }
 
 VisualizerPool::~VisualizerPool(){
-	// ---------- Tear down ----------
 	glDeleteShader(_vertShaderId);
 	glDeleteShader(_fragShaderId);
 
@@ -174,10 +173,9 @@ void VisualizerPool::draw(){
 	glViewport(0, 0, width, height);
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	// ---------- Begin draw ----------
 	glUseProgram(_programId);
 
-	GLuint matrixLoc = glGetUniformLocation(_programId, "_matrix");
+	GLuint matrixLoc = glGetUniformLocation(_programId, "matrix");
 	GLuint resolutionLoc = glGetUniformLocation(_programId, "resolution");
 	GLuint sizeLoc = glGetUniformLocation(_programId, "size");
 	GLuint heightLoc = glGetUniformLocation(_programId, "height");
@@ -189,22 +187,23 @@ void VisualizerPool::draw(){
 
 	glUniform1ui(heightLoc, height);
 
-	_buffer.clear();
-	_buffer.reserve(_indexLocations.size());
+	// DESPERATELY NEEDS UPDATING!
 
-	for (const MemHelp::Info& memInfo : _indexLocations){
-		if (memInfo)
-			_buffer.push_back({ memInfo.start, memInfo.end() });
-	}
+	//_buffer.clear();
+	//_buffer.reserve(_nodeObjects.size());
+    
+	//for (const MemoryNode& node : _nodeObjects){
+	//	if (node.active)
+	//		_buffer.push_back({ node.location, end(node) });
+	//}
 
-	glUniform1ui(sizeLoc, (GLuint)_bufferSize);
+	//glUniform1ui(sizeLoc, (GLuint)_mainMemorySize);
 
-	glNamedBufferData(_vertBufferId, _buffer.size() * sizeof(glm::uvec2), _buffer.data(), GL_DYNAMIC_DRAW);
+	//glNamedBufferData(_vertBufferId, _buffer.size() * sizeof(glm::uvec2), _buffer.data(), GL_DYNAMIC_DRAW);
 
 	glBindVertexArray(_vertArrayId);
 	glDrawArrays(GL_POINTS, 0, (GLsizei)(_buffer.size()));
 
-	// ---------- End draw ----------
 	glfwSwapBuffers(_window);
 	glfwPollEvents();
 }
