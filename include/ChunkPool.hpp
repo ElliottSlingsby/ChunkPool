@@ -73,12 +73,35 @@ protected:
 	inline uint8_t* _locationPointer(uint32_t chunkIndex, uint32_t locationIndex);
 
 public:
+	class Iterator{
+		ChunkPool& _pool;
+
+		uint32_t _chunkIndex;
+		uint32_t _locationIndex;
+
+		bool _valid = true;
+
+	public:
+		inline Iterator(ChunkPool& pool, uint32_t id);
+		inline Iterator(ChunkPool& pool);
+
+		inline uint8_t* get();
+
+		inline bool valid();
+
+		inline void next();
+	};
+
+	friend class Iterator;
+
 	inline ChunkPool(size_t chunkSize);
 	inline ~ChunkPool();
 
 	inline uint32_t set(size_t size);
 	inline uint8_t* get(uint32_t id);
 	inline void erase(uint32_t id);
+
+	inline Iterator begin();
 
 	inline unsigned int count() const;
 
@@ -227,6 +250,54 @@ uint8_t* ChunkPool::_locationPointer(uint32_t chunkIndex, uint32_t locationIndex
 	return _buffer + (_chunkSize * chunkIndex) + location.startSize;
 }
 
+ChunkPool::Iterator::Iterator(ChunkPool& pool, uint32_t id) : _pool(pool){
+	uint64_t pair = _pool._ids[id];
+
+	_chunkIndex = BitHelper::front(pair);
+	_locationIndex = BitHelper::front(pair);
+}
+
+ChunkPool::Iterator::Iterator(ChunkPool& pool) : _pool(pool){
+	_valid = false;
+}
+
+uint8_t* ChunkPool::Iterator::get(){
+	if (!_valid)
+		return nullptr;
+
+	return _pool._locationPointer(_chunkIndex, _locationIndex);
+}
+
+bool ChunkPool::Iterator::valid(){
+	return _valid;
+}
+
+void ChunkPool::Iterator::next(){
+	if (!_valid)
+		return;
+
+	if (_locationIndex < _pool._chunks[_chunkIndex].locationCount - 1){
+		_locationIndex++;
+	}
+	else if (_chunkIndex < _pool._chunkCount - 1){
+		_chunkIndex++;
+
+		while (!_pool._chunks[_chunkIndex].locationCount){
+			if (_chunkIndex == _pool._chunkCount - 1){
+				_valid = false;
+				return;
+			}
+
+			_chunkIndex++;
+		}
+
+		_locationIndex = _pool._chunks[_chunkIndex].firstLocation;
+	}
+	else{
+		_valid = false;
+	}
+}
+
 ChunkPool::ChunkPool(size_t chunkSize) : _chunkSize(chunkSize){
 	_pushChunk();
 }
@@ -347,6 +418,15 @@ void ChunkPool::erase(uint32_t id){
 	_eraseLocation(chunkIndex, locationIndex);
 
 	_freeIds.push(id);	
+}
+
+ChunkPool::Iterator ChunkPool::begin(){
+	for (unsigned int i = 0; i < _chunkCount; i++){
+		if (_chunks[i].locationCount)
+			return Iterator(*this, _chunks[i].locations[_chunks[i].firstLocation].id);
+	}
+
+	return Iterator(*this);
 }
 
 unsigned int ChunkPool::count() const{
