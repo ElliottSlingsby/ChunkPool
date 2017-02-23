@@ -85,9 +85,11 @@ public:
 		inline Iterator(ChunkPool& pool, uint32_t id);
 		inline Iterator(ChunkPool& pool);
 
+		inline Iterator& operator=(const Iterator& other);
+
 		inline uint8_t* get();
 
-		inline bool valid();
+		inline bool valid() const;
 
 		inline void next();
 	};
@@ -261,6 +263,14 @@ ChunkPool::Iterator::Iterator(ChunkPool& pool) : _pool(pool){
 	_valid = false;
 }
 
+ChunkPool::Iterator& ChunkPool::Iterator::operator=(const Iterator& other){
+	_chunkIndex = other._chunkIndex;
+	_locationIndex = other._locationIndex;
+	_valid = other._valid;
+
+	return *this;
+}
+
 uint8_t* ChunkPool::Iterator::get(){
 	if (!_valid)
 		return nullptr;
@@ -268,7 +278,7 @@ uint8_t* ChunkPool::Iterator::get(){
 	return _pool._locationPointer(_chunkIndex, _locationIndex);
 }
 
-bool ChunkPool::Iterator::valid(){
+bool ChunkPool::Iterator::valid() const{
 	return _valid;
 }
 

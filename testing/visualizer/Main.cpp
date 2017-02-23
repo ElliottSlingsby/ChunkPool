@@ -18,7 +18,7 @@ struct Test{
 	int y;
 	int z;
 
-	uint8_t filler[100]; // bytes
+	uint8_t filler[256]; // bytes
 };
 
 int main(int argc, char *argv[]){
@@ -39,29 +39,51 @@ int main(int argc, char *argv[]){
 
 	std::chrono::high_resolution_clock::duration dt = end - start;
 
-	while (1){
+
+	float max = 5.f;
+
+	float seconds = max;
+	unsigned int counter = 0;
+
+	while (seconds > 0){
 		dt = end - start;
-
-		std::cout << std::chrono::duration_cast<std::chrono::duration<float>>(dt).count()  * 1000 << " ms\n";
-
+		
 		start = std::chrono::high_resolution_clock::now();
-
+	
 		auto iter = pool.begin();
-
+	
 		while (iter.valid()){
 			*((Test*)iter.get()) = Test(rand(), rand(), rand());
-
+	
 			iter.next();
 		}
+	
+		//std::cout << std::chrono::duration_cast<std::chrono::duration<float>>(dt).count() * 1000 << " ms\n";
+
+		seconds -= std::chrono::duration_cast<std::chrono::duration<float>>(dt).count();
+		counter++;
 
 		end = std::chrono::high_resolution_clock::now();
 	}
 
-	// randomly remove half all elements
-	//for (unsigned int i = 0; i < count; i++){
-	//	if (!(rand() % 2))
-	//		pool.erase(i);
-	//}
+	std::cout << "FPS : " << counter / max << "\n";
+
+
+	start = std::chrono::high_resolution_clock::now();
+
+	// Randomly remove half all elements
+	for (unsigned int i = 0; i < count; i++){
+		if (!(rand() % 100))
+			pool.erase(i);
+	}
+
+	end = std::chrono::high_resolution_clock::now();
+
+	dt = end - start;
+
+	std::cout << "Removing : " << std::chrono::duration_cast<std::chrono::duration<float>>(dt).count() * 1000 << " ms\n";
+
+	std::getchar();
 
 	return 0;
 }

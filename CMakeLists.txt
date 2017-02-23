@@ -4,13 +4,14 @@ project("ChunkPool" C CXX)
 
 include("functions.cmake")
 
-option(OBJECTPOOL_TESTING "ChunkPool testing" ON)
+option(CHUNKPOOL_UNITTEST "ChunkPool testing" OFF)
+option(CHUNKPOOL_VISUALIZER "ChunkPool visualizer" OFF)
 
 add_subdirectory("thirdparty")
 
 add_subdirectory("include")
 
-if(OBJECTPOOL_TESTING)
+if(CHUNKPOOL_UNITTEST OR CHUNKPOOL_VISUALIZER)
 	set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 	
 	if(MSVC)
@@ -25,6 +26,16 @@ if(OBJECTPOOL_TESTING)
 		set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 		set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 	endif(MSVC)
-	
+endif(CHUNKPOOL_UNITTEST OR CHUNKPOOL_VISUALIZER)
+
+if(CHUNKPOOL_VISUALIZER)
 	add_subdirectory("testing/visualizer")
-endif(OBJECTPOOL_TESTING)
+endif(CHUNKPOOL_VISUALIZER)
+	
+if(CHUNKPOOL_UNITTEST)
+	add_subdirectory("testing/unittest")
+endif(CHUNKPOOL_UNITTEST)
+	
+	
+	
+	
