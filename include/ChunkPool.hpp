@@ -16,7 +16,6 @@
 // The chunk size is what dictates performance depending on the sizes of blocks being created, as a larger chunk size means less time allocating, and smaller chunk size means less time copying.
 
 class ChunkPool{
-protected:
 	struct Location{
 		enum Flags{
 			LeftExists,
@@ -49,6 +48,35 @@ protected:
 		uint32_t lastLocation;
 	};
 
+public:
+	class Iterator{
+		ChunkPool& _pool;
+
+		uint32_t _id;
+
+		uint32_t _chunkIndex;
+		uint32_t _locationIndex;
+
+		bool _valid = true;
+
+	public:
+		inline Iterator(ChunkPool& pool, uint32_t id);
+		inline Iterator(ChunkPool& pool);
+
+		inline Iterator& operator=(const Iterator& other);
+
+		inline uint8_t* get();
+
+		inline bool valid() const;
+
+		inline void next();
+
+		inline uint32_t id() const;
+	};
+
+	friend class Iterator;
+
+private:
 	uint8_t* _buffer = nullptr;
 	size_t _bufferSize = 0;
 
@@ -73,33 +101,10 @@ protected:
 	inline uint8_t* _locationPointer(uint32_t chunkIndex, uint32_t locationIndex);
 
 public:
-	class Iterator{
-		ChunkPool& _pool;
-
-		uint32_t _chunkIndex;
-		uint32_t _locationIndex;
-
-		bool _valid = true;
-
-	public:
-		inline Iterator(ChunkPool& pool, uint32_t id);
-		inline Iterator(ChunkPool& pool);
-
-		inline Iterator& operator=(const Iterator& other);
-
-		inline uint8_t* get();
-
-		inline bool valid() const;
-
-		inline void next();
-	};
-
-	friend class Iterator;
-
 	inline ChunkPool(size_t chunkSize);
-	inline ~ChunkPool();
+	inline virtual ~ChunkPool();
 
-	inline uint32_t set(size_t size);
+	inline uint32_t insert(size_t size);
 	inline uint8_t* get(uint32_t id);
 	inline void erase(uint32_t id);
 
@@ -109,6 +114,71 @@ public:
 
 	inline void print() const;
 };
+
+ChunkPool::Iterator::Iterator(ChunkPool& pool, uint32_t id) : _pool(pool){
+	_id = id;
+
+	uint64_t pair = _pool._ids[_id];
+
+	_chunkIndex = BitHelper::front(pair);
+	_locationIndex = BitHelper::front(pair);
+}
+
+ChunkPool::Iterator::Iterator(ChunkPool& pool) : _pool(pool){
+	_valid = false;
+}
+
+ChunkPool::Iterator& ChunkPool::Iterator::operator=(const Iterator& other){
+	_chunkIndex = other._chunkIndex;
+	_locationIndex = other._locationIndex;
+	_valid = other._valid;
+
+	return *this;
+}
+
+uint8_t* ChunkPool::Iterator::get(){
+	if (!_valid)
+		return nullptr;
+
+	return _pool._locationPointer(_chunkIndex, _locationIndex);
+}
+
+bool ChunkPool::Iterator::valid() const{
+	return _valid;
+}
+
+void ChunkPool::Iterator::next(){
+	if (!_valid)
+		return;
+
+	if (_locationIndex < _pool._chunks[_chunkIndex].locationCount - 1){
+		_locationIndex++;
+	}
+	else if (_chunkIndex < _pool._chunkCount - 1){
+		_chunkIndex++;
+
+		while (!_pool._chunks[_chunkIndex].locationCount){
+			if (_chunkIndex == _pool._chunkCount - 1){
+				_valid = false;
+				return;
+			}
+
+			_chunkIndex++;
+		}
+
+		_locationIndex = _pool._chunks[_chunkIndex].firstLocation;
+	}
+	else{
+		_valid = false;
+	}
+
+	if (_valid)
+		_id = _pool._chunks[_chunkIndex].locations[_locationIndex].id;
+}
+
+inline uint32_t ChunkPool::Iterator::id() const{
+	return _id;
+}
 
 template <typename T>
 T* ChunkPool::_allocate(T* location, unsigned int count){
@@ -252,62 +322,6 @@ uint8_t* ChunkPool::_locationPointer(uint32_t chunkIndex, uint32_t locationIndex
 	return _buffer + (_chunkSize * chunkIndex) + location.startSize;
 }
 
-ChunkPool::Iterator::Iterator(ChunkPool& pool, uint32_t id) : _pool(pool){
-	uint64_t pair = _pool._ids[id];
-
-	_chunkIndex = BitHelper::front(pair);
-	_locationIndex = BitHelper::front(pair);
-}
-
-ChunkPool::Iterator::Iterator(ChunkPool& pool) : _pool(pool){
-	_valid = false;
-}
-
-ChunkPool::Iterator& ChunkPool::Iterator::operator=(const Iterator& other){
-	_chunkIndex = other._chunkIndex;
-	_locationIndex = other._locationIndex;
-	_valid = other._valid;
-
-	return *this;
-}
-
-uint8_t* ChunkPool::Iterator::get(){
-	if (!_valid)
-		return nullptr;
-
-	return _pool._locationPointer(_chunkIndex, _locationIndex);
-}
-
-bool ChunkPool::Iterator::valid() const{
-	return _valid;
-}
-
-void ChunkPool::Iterator::next(){
-	if (!_valid)
-		return;
-
-	if (_locationIndex < _pool._chunks[_chunkIndex].locationCount - 1){
-		_locationIndex++;
-	}
-	else if (_chunkIndex < _pool._chunkCount - 1){
-		_chunkIndex++;
-
-		while (!_pool._chunks[_chunkIndex].locationCount){
-			if (_chunkIndex == _pool._chunkCount - 1){
-				_valid = false;
-				return;
-			}
-
-			_chunkIndex++;
-		}
-
-		_locationIndex = _pool._chunks[_chunkIndex].firstLocation;
-	}
-	else{
-		_valid = false;
-	}
-}
-
 ChunkPool::ChunkPool(size_t chunkSize) : _chunkSize(chunkSize){
 	_pushChunk();
 }
@@ -328,7 +342,7 @@ ChunkPool::~ChunkPool(){
 		std::free(_buffer);
 }
 
-uint32_t ChunkPool::set(size_t size){
+uint32_t ChunkPool::insert(size_t size){
 	assert(size <= _chunkSize);
 
 	// Find first available chunk with top size big enough

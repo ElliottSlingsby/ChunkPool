@@ -28,7 +28,7 @@ TEST(ChunkPoolTest, Iteration){
 	added.resize(BLOCKS);
 
 	for (unsigned int i = 0; i < BLOCKS; i++){
-		unsigned int index = pool.set(sizeof(TestObject));
+		unsigned int index = pool.insert(sizeof(TestObject));
 
 		added[index] = { index, TestObject(rand(), index, rand()) }; // setting y to index for later
 
@@ -51,13 +51,13 @@ TEST(ChunkPoolTest, Iteration){
 	}
 }
 
-TEST(ChunkPoolTest, SetGetErase){
+TEST(ChunkPoolTest, InsertErase){
 	ChunkPool pool(CHUNK);
 
 	std::list<std::pair<uint32_t, TestObject>> added;
 
 	for (unsigned int i = 0; i < BLOCKS; i++){
-		added.push_back({ pool.set(sizeof(TestObject)), TestObject(rand(), rand(), rand()) });
+		added.push_back({ pool.insert(sizeof(TestObject)), TestObject(rand(), rand(), rand()) });
 		(*(TestObject*)pool.get(added.rbegin()->first)) = added.rbegin()->second;
 	}
 
