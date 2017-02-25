@@ -15,10 +15,6 @@ namespace BitHelper{
 	inline uint32_t back(uint64_t i);
 
 	inline uint64_t combine(uint32_t front, uint32_t back);
-
-	inline void setBits(uint8_t* bits, size_t stride, unsigned int position, unsigned int value);
-
-	inline unsigned int getBits(uint8_t* bits, size_t stride, unsigned int position);
 }
 
 template<typename T>
@@ -44,12 +40,4 @@ uint32_t BitHelper::front(uint64_t i){
 
 uint64_t BitHelper::combine(uint32_t front, uint32_t back){
 	return back + ((uint64_t)front << 32);
-}
-
-void BitHelper::setBits(uint8_t* bits, size_t stride, unsigned int position, unsigned int value){
-
-}
-
-unsigned int BitHelper::getBits(uint8_t* bits, size_t stride, unsigned int position){
-	return 0;
 }

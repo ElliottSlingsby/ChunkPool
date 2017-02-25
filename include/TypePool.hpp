@@ -11,6 +11,27 @@
 #define MAX_TYPES 16
 #endif
 
+// TypePool: An extension of ChunkPool for storing groups of data types and iterating over them using lambdas with type pointers as parameters.
+// Each block of memory allocated in the ChunkPool has a mask describing what objects that block contains, masks being automatically created from template and lambda arguments.
+// The lambda iterator will only iterate over blocks containing the data types provided as pointers in the lambda parameters.
+
+/*
+pool.insert<Banana, Dog, Puzzle>(1, 1, 1);				// Will iterate over (arguments are how many of each type)
+pool.insert<Banana, Dog, Wizard, Puzzle>(1, 1, 1, 5);	// Will iterate over (5 of Puzzle for array example)
+pool.insert<Banana, Dog>(1, 1, 1);						// Will NOT iterate over (doesn't contain Puzzle)
+
+pool.execute([](const TypePool::Mask& mask, Banana* banana, Dog* dog, Puzzle* puzzle){   // Data types provided as pointers in the lambda arguments (mask is a required arg for pool lambdas)	
+	
+	// Do stuff here
+	
+	for (unsigned int i = 0; i < mask.length<Puzzle(); i++){
+		puzzle[i];		// Array example
+	}
+
+	return;
+});
+*/
+
 class TypePool{
 public:
 	class Mask{
@@ -47,10 +68,13 @@ private:
 	template <unsigned int I, typename ...Args>
 	inline typename std::enable_if<I <sizeof...(Args), void>::type _fillMask(const Mask& mask);
 
-	template <typename ...Args>
-	inline void _setMask(uint32_t id);
+	template <unsigned int I, typename ...Args, typename ...Is>
+	inline typename std::enable_if<I == sizeof...(Args), void>::type _fillMask(const Mask& mask, Is... i);
 
-	inline void _clearMask(uint32_t id);
+	template <unsigned int I, typename ...Args, typename ...Is>
+	inline typename std::enable_if<I <sizeof...(Args), void>::type _fillMask(const Mask& mask, Is... i);
+
+	inline void _clearMask(const Mask& mask);
 
 	inline Mask _getMask(uint32_t id);
 
@@ -70,11 +94,17 @@ private:
 	inline void _callLambda(const T& lambda, const Mask& mask, std::tuple<Args*...>* tuple);
 
 	template <unsigned int I, typename ...Args>
-	inline typename std::enable_if<I == sizeof...(Args), size_t>::type _sizeof();
+	inline typename std::enable_if<I == sizeof...(Args), size_t>::type _sizeOf();
 
 	template <unsigned int I, typename ...Args>
-	inline typename std::enable_if<I <sizeof...(Args), size_t>::type _sizeof();
+	inline typename std::enable_if<I <sizeof...(Args), size_t>::type _sizeOf();
 
+	template <unsigned int I, typename ...Args, typename ...Is>
+	inline typename std::enable_if<I == sizeof...(Args), size_t>::type _sizeOf(Is... i);
+
+	template <unsigned int I, typename ...Args, typename ...Is>
+	inline typename std::enable_if<I <sizeof...(Args), size_t>::type _sizeOf(Is... i);
+	
 	template <typename T>
 	inline size_t _typeOffset(const Mask& mask);
 
@@ -82,11 +112,14 @@ public:
 	inline TypePool(size_t chunkSize);
 	inline ~TypePool();
 
-	template <typename ...Args>
-	inline uint32_t insert();
+	template <typename ...Args, typename ...Is>
+	inline uint32_t insert(Is... i);
 
 	inline void erase(uint32_t id);
 	
+	template <typename T>
+	inline unsigned int length(uint32_t id);
+
 	template <typename T>
 	inline T* get(uint32_t id);
 
@@ -146,13 +179,25 @@ void TypePool::_callLambda(const T& lambda, const Mask& mask, std::tuple<Args*..
 }
 
 template<unsigned int I, typename ...Args>
-typename std::enable_if<I == sizeof...(Args), size_t>::type TypePool::_sizeof(){
+typename std::enable_if<I == sizeof...(Args), size_t>::type TypePool::_sizeOf(){
 	return 0;
 }
 
 template <unsigned int I, typename ...Args>
-typename std::enable_if < I <sizeof...(Args), size_t>::type TypePool::_sizeof(){
-	return sizeof(std::tuple_element_t<I, std::tuple<Args...>>) + _sizeof<I + 1, Args...>();
+typename std::enable_if < I <sizeof...(Args), size_t>::type TypePool::_sizeOf(){
+	using T = std::tuple_element_t<I, std::tuple<Args...>>;
+	return sizeof(T) + _sizeOf<I + 1, Args...>();
+}
+
+template <unsigned int I, typename ...Args, typename ...Is>
+inline typename std::enable_if<I == sizeof...(Args), size_t>::type TypePool::_sizeOf(Is... i){
+	return 0;
+}
+
+template <unsigned int I, typename ...Args, typename ...Is>
+inline typename std::enable_if < I < sizeof...(Args), size_t>::type TypePool::_sizeOf(Is... i){
+	using T = std::tuple_element_t<I, std::tuple<Args...>>;
+	return (sizeof(T) * std::get<I>(std::tuple<Is...>(i...))) + _sizeOf<I + 1, Args...>(i...);
 }
 
 template<typename T>
@@ -194,19 +239,25 @@ typename std::enable_if<I == sizeof...(Args), void>::type TypePool::_fillMask(co
 
 template <unsigned int I, typename ...Args>
 typename std::enable_if<I < sizeof...(Args), void>::type TypePool::_fillMask(const Mask& mask){
-	mask._start[_typeId<std::tuple_element_t<I, std::tuple<Args...>>>()] = 1;
+	using T = std::tuple_element_t<I, std::tuple<Args...>>;
+	mask._start[_typeId<T>()] = 1;
+
 	_fillMask<I + 1, Args...>(mask);
 }
 
-template<typename ...Args>
-inline void TypePool::_setMask(uint32_t id){
-	Mask mask = _getMask(id);
-	_clearMask(id);
-	_fillMask<0, Args...>(mask);
+template <unsigned int I, typename ...Args, typename ...Is>
+inline typename std::enable_if<I == sizeof...(Args), void>::type TypePool::_fillMask(const Mask& mask, Is... i){}
+
+template <unsigned int I, typename ...Args, typename ...Is>
+inline typename std::enable_if<I < sizeof...(Args), void>::type TypePool::_fillMask(const Mask& mask, Is... i){
+	using T = std::tuple_element_t<I, std::tuple<Args...>>;
+	mask._start[_typeId<T>()] = std::get<I>(std::tuple<Is...>(i...));
+
+	_fillMask<I + 1, Args...>(mask, i...);
 }
 
-inline void TypePool::_clearMask(uint32_t id){
-	std::memset(&_maskBuffer[id * MAX_TYPES], 0, MAX_TYPES);
+inline void TypePool::_clearMask(const Mask& mask){
+	std::memset(mask._start, 0, MAX_TYPES);
 }
 
 inline TypePool::Mask TypePool::_getMask(uint32_t id){
@@ -236,21 +287,31 @@ TypePool::~TypePool(){
 	//	std::free(_versions);
 }
 
-template<typename ...Args>
-uint32_t TypePool::insert(){
-	uint32_t id = _pool.insert(_sizeof<0, Args...>());
-	_setMask<Args...>(id);
+template <typename ...Args, typename ...Is>
+inline uint32_t TypePool::insert(Is... i){
+	uint32_t id = _pool.insert(_sizeOf<0, Args...>(i...));
+
+	Mask mask = _getMask(id);
+
+	_clearMask(mask);
+	_fillMask<0, Args...>(mask, i...);
+
 	return id;
 }
 
 void TypePool::erase(uint32_t id){
-	_clearMask(id);
+	_clearMask(_getMask(id));
 	_pool.erase(id);
 }
 
 template<typename T>
+inline unsigned int TypePool::length(uint32_t id){
+	return _getMask(id)._start[_typeId<T>()];
+}
+
+template<typename T>
 inline T* TypePool::get(uint32_t id){
-	return (T*)_pool.get(id) + _typeOffset<T>(_getMask(id));
+	return (T*)(_pool.get(id) + _typeOffset<T>(_getMask(id)));
 }
 
 template<typename T>
