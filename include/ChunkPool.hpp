@@ -20,7 +20,8 @@ class ChunkPool{
 		enum Flags{
 			LeftExists,
 			RightExists,
-			Active
+			Active,
+			Excluded
 		};
 
 		uint32_t index;
@@ -90,12 +91,15 @@ private:
 
 	FlatStack<uint32_t> _freeIds;
 
+	FlatStack<uint32_t> _excludedIds;
+
 	template <typename T>
 	inline T* _allocate(T* location, unsigned int count);
 
 	inline uint32_t _pushChunk();
 
 	inline uint32_t _pushLocation(uint32_t chunkIndex, size_t size);
+
 	inline void _eraseLocation(uint32_t chunkIndex, uint32_t locationIndex);
 
 	inline uint8_t* _locationPointer(uint32_t chunkIndex, uint32_t locationIndex);
@@ -104,13 +108,21 @@ public:
 	inline ChunkPool(size_t chunkSize);
 	inline virtual ~ChunkPool();
 
-	inline uint32_t insert(size_t size);
+	inline uint32_t insert(size_t size, bool excluded = false);
+
 	inline uint8_t* get(uint32_t id);
+
 	inline void erase(uint32_t id);
 
 	inline Iterator begin();
 
 	inline unsigned int count() const;
+
+	inline void activate(uint32_t id, bool active);
+
+	inline bool exclusion() const;
+
+	inline uint32_t popExcluded();
 
 	inline void print() const;
 };
@@ -129,6 +141,8 @@ ChunkPool::Iterator::Iterator(ChunkPool& pool) : _pool(pool){
 }
 
 ChunkPool::Iterator& ChunkPool::Iterator::operator=(const Iterator& other){
+	assert(other._valid);
+
 	_chunkIndex = other._chunkIndex;
 	_locationIndex = other._locationIndex;
 	_valid = other._valid;
@@ -151,32 +165,25 @@ void ChunkPool::Iterator::next(){
 	if (!_valid)
 		return;
 
-	if (_locationIndex < _pool._chunks[_chunkIndex].locationCount - 1){
-		_locationIndex++;
-	}
-	else if (_chunkIndex < _pool._chunkCount - 1){
-		_chunkIndex++;
+	for (_chunkIndex; _chunkIndex < _pool._chunkCount; _chunkIndex++){
+		while (BitHelper::getBit(_pool._chunks[_chunkIndex].locations[_locationIndex].flags, Location::RightExists)){
+			_locationIndex = _pool._chunks[_chunkIndex].locations[_locationIndex].rightLocation;
 
-		while (!_pool._chunks[_chunkIndex].locationCount){
-			if (_chunkIndex == _pool._chunkCount - 1){
-				_valid = false;
+			if (!BitHelper::getBit(_pool._chunks[_chunkIndex].locations[_locationIndex].flags, Location::Excluded) && BitHelper::getBit(_pool._chunks[_chunkIndex].locations[_locationIndex].flags, Location::Active)){
+				_id = _pool._chunks[_chunkIndex].locations[_locationIndex].id;
 				return;
 			}
-
-			_chunkIndex++;
 		}
 
-		_locationIndex = _pool._chunks[_chunkIndex].firstLocation;
-	}
-	else{
-		_valid = false;
+		if (_chunkIndex + 1 < _pool._chunkCount)
+			_locationIndex = _pool._chunks[_chunkIndex + 1].firstLocation;
 	}
 
-	if (_valid)
-		_id = _pool._chunks[_chunkIndex].locations[_locationIndex].id;
+	_valid = false;
 }
 
-inline uint32_t ChunkPool::Iterator::id() const{
+uint32_t ChunkPool::Iterator::id() const{
+	assert(_valid);
 	return _id;
 }
 
@@ -220,6 +227,7 @@ uint32_t ChunkPool::_pushLocation(uint32_t chunkIndex, size_t size){
 
 	newLoc = Location();
 	newLoc.index = chunk.locationCount;
+
 	newLoc.flags = BitHelper::setBit(newLoc.flags, Location::Active, true);
 
 	if (chunk.locationCount == 0){
@@ -342,7 +350,7 @@ ChunkPool::~ChunkPool(){
 		std::free(_buffer);
 }
 
-uint32_t ChunkPool::insert(size_t size){
+uint32_t ChunkPool::insert(size_t size, bool excluded){
 	assert(size <= _chunkSize);
 
 	// Find first available chunk with top size big enough
@@ -383,7 +391,15 @@ uint32_t ChunkPool::insert(size_t size){
 	_ids[id] = BitHelper::combine(chunkIndex, locationIndex);
 
 	// Update location with id
-	_chunks[chunkIndex].locations[locationIndex].id = id;
+	Location& location = _chunks[chunkIndex].locations[locationIndex];
+
+	location.id = id;
+
+	// If excluded, mark as excluded
+	if (excluded){
+		location.flags = BitHelper::setBit(location.flags, Location::Excluded, true);
+		_excludedIds.push(id);
+	}
 
 	return id;
 }
@@ -446,8 +462,13 @@ void ChunkPool::erase(uint32_t id){
 
 ChunkPool::Iterator ChunkPool::begin(){
 	for (unsigned int i = 0; i < _chunkCount; i++){
-		if (_chunks[i].locationCount)
-			return Iterator(*this, _chunks[i].locations[_chunks[i].firstLocation].id);
+		uint32_t locIndex = _chunks[i].firstLocation;
+
+		while (BitHelper::getBit(_chunks[i].locations[locIndex].flags, Location::RightExists) && BitHelper::getBit(_chunks[i].locations[locIndex].flags, Location::Excluded) && !BitHelper::getBit(_chunks[i].locations[locIndex].flags, Location::Active))
+			locIndex = _chunks[i].locations[locIndex].rightLocation;
+
+		if (!BitHelper::getBit(_chunks[i].locations[locIndex].flags, Location::Excluded) && BitHelper::getBit(_chunks[i].locations[locIndex].flags, Location::Active))
+			return Iterator(*this, locIndex);
 	}
 
 	return Iterator(*this);
@@ -461,6 +482,31 @@ unsigned int ChunkPool::count() const{
 	}
 
 	return count;
+}
+
+void ChunkPool::activate(uint32_t id, bool active){
+	uint64_t pair = _ids[id];
+
+	Location& location = _chunks[BitHelper::front(pair)].locations[BitHelper::back(pair)];
+
+	location.flags = BitHelper::setBit(location.flags, Location::Active, active);
+}
+
+bool ChunkPool::exclusion() const{
+	return _excludedIds.empty();
+}
+
+uint32_t ChunkPool::popExcluded(){
+	uint32_t id = _excludedIds.top();
+	_excludedIds.pop();
+
+	uint64_t pair = _ids[id];
+
+	Location& location = _chunks[BitHelper::front(pair)].locations[BitHelper::back(pair)];
+
+	location.flags = BitHelper::setBit(location.flags, Location::Excluded, false);
+
+	return id;
 }
 
 void ChunkPool::print() const{
